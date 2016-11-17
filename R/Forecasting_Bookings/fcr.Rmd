@@ -29,25 +29,30 @@ bookings <- read_csv("C:/Users/sayooj/Downloads/bookings.csv")
 #View(bookings)
 ```
 
-Time-series plot of Fare for every destination
-
-```{r}
-ggplot(na.omit(bookings),aes(mdy_hm(bookings$DepartureDate,locale = "English"),Fare)) + 
-  geom_point() + 
-  facet_wrap(~ Destination) + 
-  theme(axis.text.x = element_text(angle = 60, hjust = 1))
-```
-
-```{r}
-ggplot(na.omit(bookings),aes(mdy_hm(bookings$DepartureDate,locale = "English"),Fare)) + 
-  geom_point() + 
-  facet_wrap(~ Origin) + 
-  theme(axis.text.x = element_text(angle = 60, hjust = 1))
-```
-
 Parse Day
 
 ```{r}
 bookings$DayOfDeparture  = wday(mdy_hm(bookings$DepartureDate,locale = "English"),label = TRUE)
 ```
 
+Fare Per Person
+```{r}
+bookings$FarePP = bookings$Fare/bookings$PassengerCount
+```
+
+
+Time-series plot of Fare for every destination
+
+```{r}
+ggplot(na.omit(bookings),aes(mdy_hm(DepartureDate,locale = "English"),FarePP)) + 
+  geom_point() + 
+  facet_wrap(~ Destination) + 
+  theme(axis.text.x = element_text(angle = 60, hjust = 1))
+```
+
+```{r}
+ggplot(na.omit(bookings),aes(mdy_hm(DepartureDate,locale = "English"),FarePP)) + 
+  geom_point() + 
+  facet_wrap(~ Origin) + 
+  theme(axis.text.x = element_text(angle = 60, hjust = 1))
+```
