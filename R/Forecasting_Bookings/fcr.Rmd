@@ -1,0 +1,58 @@
+---
+title: "R Notebook"
+output:
+  html_document: default
+  html_notebook: default
+---
+
+Packages to be installed
+
+```{r}
+if (!require(tidyverse)){install.packages("tidyverse",dependencies = TRUE)} 
+library(tidyverse)
+
+if (!require(readr)){install.packages("readr",dependencies = TRUE)} 
+library(readr)
+
+if (!require(lubridate)){install.packages("lubridate",dependencies = TRUE)} 
+library(lubridate)
+
+if (!require(ggplot2)){install.packages("ggplot2",dependencies = TRUE)} 
+library(ggplot2)
+
+```
+
+Import the data from source location:
+
+```{r}
+bookings <- read_csv("C:/Users/sayooj/Downloads/bookings.csv")
+#View(bookings)
+```
+
+Parse Day
+
+```{r}
+bookings$DayOfDeparture  = wday(mdy_hm(bookings$DepartureDate,locale = "English"),label = TRUE)
+```
+
+Fare Per Person
+```{r}
+bookings$FarePP = bookings$Fare/bookings$PassengerCount
+```
+
+
+Time-series plot of Fare for every destination
+
+```{r}
+ggplot(na.omit(bookings),aes(mdy_hm(DepartureDate,locale = "English"),FarePP)) + 
+  geom_point() + 
+  facet_wrap(~ Destination) + 
+  theme(axis.text.x = element_text(angle = 60, hjust = 1))
+```
+
+```{r}
+ggplot(na.omit(bookings),aes(mdy_hm(DepartureDate,locale = "English"),FarePP)) + 
+  geom_point() + 
+  facet_wrap(~ Origin) + 
+  theme(axis.text.x = element_text(angle = 60, hjust = 1))
+```
