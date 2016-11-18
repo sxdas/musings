@@ -5,9 +5,9 @@ output:
   html_notebook: default
 ---
 
-Packages to be installed
+# Packages to be installed
 
-```{r}
+```{r echo=FALSE}
 if (!require(tidyverse)){install.packages("tidyverse",dependencies = TRUE)} 
 library(tidyverse)
 
@@ -20,28 +20,90 @@ library(lubridate)
 if (!require(ggplot2)){install.packages("ggplot2",dependencies = TRUE)} 
 library(ggplot2)
 
+if (!require(randomForest)){install.packages("randomForest",dependencies = TRUE)} 
+library(randomForest)
+
+if (!require(party)){install.packages("party",dependencies = TRUE)} 
+library(party)
+
+if (!require(ipred)){install.packages("ipred",dependencies = TRUE)} 
+library(ipred)
+
+if (!require(forecast)){install.packages("forecast",dependencies = TRUE)} 
+library(forecast)
+
 ```
 
-Import the data from source location:
+## Import the data from source location:
 
 ```{r}
 bookings <- read_csv("C:/Users/sayooj/Downloads/bookings.csv")
 #View(bookings)
 ```
 
-Parse Day
+## Tidy the data
 
 ```{r}
+
+bookings <- bookings %>% drop_na()
+
+```
+
+
+
+
+# Feature Engineering
+
+### Parse Out Day of Week
+
+```{r}
+
 bookings$DayOfDeparture  = wday(mdy_hm(bookings$DepartureDate,locale = "English"),label = TRUE)
 ```
 
-Fare Per Person
+### Normalize Fare Per Person
 ```{r}
 bookings$FarePP = bookings$Fare/bookings$PassengerCount
 ```
 
+### Convert to FACTOR
 
-Time-series plot of Fare for every destination
+```{r}
+bookings$class = as.factor(bookings$InvClass)
+bookings$orig = as.factor(bookings$Origin)
+bookings$desti = as.factor(bookings$Destination)
+```
+
+### Puzzling FE
+
+```{r}
+varNames <- names(bookings)
+# Exclude ID or Response variable
+varNames <- varNames[varNames %in% c("FarePP","ID","FareBreakFareBasis","BookingAgent",
+                                      "TicketDate","AgencyNumber","Channel","DepartureDate","Fare",
+                                      "InvClass","Origin","Destination","PassengerMiles")]
+
+# add + sign between exploratory variables
+varNames1 <- paste(varNames, collapse = "+")
+varNames1
+
+# Add response variable and convert to a formula object
+rf.form <- as.formula(paste("FarePP", varNames1, sep = " ~ "))
+rf.form
+
+v1 <- c(bookings$class,bookings$orig,bookings$desti,bookings$PassengerCount,
+          bookings$PassengerMiles,bookings$DayOfDeparture)
+
+# is.finite(v1)
+# which(is.infinite(v1))
+# is.na(v1)
+# which(is.na(v1))
+
+```
+
+
+
+### Time-series plot of Fare for every destination
 
 ```{r}
 ggplot(na.omit(bookings),aes(mdy_hm(DepartureDate,locale = "English"),FarePP)) + 
@@ -50,9 +112,100 @@ ggplot(na.omit(bookings),aes(mdy_hm(DepartureDate,locale = "English"),FarePP)) +
   theme(axis.text.x = element_text(angle = 60, hjust = 1))
 ```
 
+### Time-series plot of Fare for every origin
+
 ```{r}
 ggplot(na.omit(bookings),aes(mdy_hm(DepartureDate,locale = "English"),FarePP)) + 
   geom_point() + 
   facet_wrap(~ Origin) + 
   theme(axis.text.x = element_text(angle = 60, hjust = 1))
 ```
+
+
+### Split Data into 3 - train, test and validation
+
+```{r}
+newdata = sample(seq(1, 3), size = nrow(bookings), replace = TRUE, prob = c(.4, .3, .3))
+train = bookings[newdata == 1,]
+validation = bookings[newdata == 2,]
+test = bookings[newdata == 3,]
+```
+
+# Modeling
+
+```{r}
+rmse <- function(error)
+{
+    sqrt(mean(error^2))
+}
+```
+
+
+## Ensemble Methods
+
+### Bagged Trees
+```{r}
+baggedTree.time0 = proc.time()
+
+baggedTree = bagging(FarePP~orig+desti+PassengerMiles+DayOfDeparture+class,data = bookings)
+
+baggedTree.time = proc.time()-baggedTree.time0
+
+bookings.pred.bagging = predict(baggedTree,bookings)
+
+# cbind(bookings$FarePP,bookings.pred.bagging)
+```
+
+
+
+
+## Forecasting Fares
+
+### Data Prep
+
+```{r}
+bookings %>% group_by(orig,desti) %>% tally(sort = TRUE) #indicates DATASET has DTW-LAS as highest number of flights
+
+
+df_LAS = bookings %>% dplyr::filter(orig == 'DTW' & desti == 'LAS') %>% 
+              select(DepartureDate,FarePP) %>% 
+              filter(FarePP > 0) %>% 
+              group_by(DepartureDate) %>% 
+              summarise(FarePP = mean(FarePP))
+
+df_LAS$DepartureDate = mdy_hm(df_LAS$DepartureDate,locale = "English")
+
+tsdf_LAS = ts(df_LAS$FarePP,start = 2005, frequency = 365.25)
+
+tsdf_LAS
+```
+
+
+### Exponential Smoothing Method
+```{r}
+m_ets = ets(tsdf_LAS)
+f_ets = forecast(m_ets, h=15) # forecast 15 months into the future
+plot(f_ets)
+```
+
+
+### Auto ARIMA
+```{r}
+m_aa = auto.arima(tsdf_LAS)
+f_aa = forecast(m_aa, h=6) # forecast 24 months into the future
+plot(f_aa)
+```
+
+
+### Forecasting Model Comparison
+
+```{r}
+barplot(c(ETS=m_ets$aic, ARIMA=m_aa$aic),
+    col="light blue",
+    ylab="AIC")
+```
+
+
+
+
+
